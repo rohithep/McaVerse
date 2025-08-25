@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'register_page.dart';
 
 class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});
@@ -39,7 +40,8 @@ class _WelcomePageState extends State<WelcomePage>
       child: TextButton(
         style: TextButton.styleFrom(
           minimumSize: const Size(180, 42),
-          backgroundColor: Colors.blueAccent.withOpacity(0.85),
+          backgroundColor: Colors.blueAccent.withValues(alpha: 0.85),
+
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
@@ -78,7 +80,7 @@ class _WelcomePageState extends State<WelcomePage>
           ),
         ),
         child: Container(
-          color: Colors.black.withOpacity(0.1),
+          color: Colors.black.withValues(alpha: 0.3),
           child: SafeArea(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -115,11 +117,12 @@ class _WelcomePageState extends State<WelcomePage>
                     }),
                     const SizedBox(height: 10),
                     _buildButton('Register', () {
-                      Navigator.pushNamed(
+                      Navigator.push(
                         context,
-                        '/register',
-                      ); // make sure RegisterPage exists
+                        MaterialPageRoute(builder: (_) => const RegisterPage()),
+                      );
                     }),
+
                     const SizedBox(height: 10),
                     _buildButton('Login as Guest', () {
                       // You can implement guest login or navigate to home directly

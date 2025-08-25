@@ -27,7 +27,10 @@ class _LoginPageState extends State<LoginPage> {
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      // Successful login - navigate to home page
+
+      if (!mounted) return;
+
+      // Navigate to home page after successful login
       Navigator.pushReplacementNamed(context, '/home');
     } on FirebaseAuthException catch (e) {
       String message = 'Login failed';
@@ -36,13 +39,17 @@ class _LoginPageState extends State<LoginPage> {
       } else if (e.code == 'wrong-password') {
         message = 'Incorrect password.';
       }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(message)));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(message)));
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -61,8 +68,10 @@ class _LoginPageState extends State<LoginPage> {
           ),
         ),
         child: Container(
-          color: Colors.black.withOpacity(0.2),
           padding: const EdgeInsets.symmetric(horizontal: 32),
+          color: Colors.black.withAlpha(
+            (0.2 * 255).toInt(),
+          ), // instead of withOpacity
           child: Center(
             child: SingleChildScrollView(
               child: Form(
@@ -79,6 +88,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 32),
+                    // Email Field
                     TextFormField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
@@ -87,7 +97,7 @@ class _LoginPageState extends State<LoginPage> {
                         labelText: 'Email',
                         labelStyle: const TextStyle(color: Colors.white70),
                         filled: true,
-                        fillColor: Colors.black.withOpacity(0.3),
+                        fillColor: Colors.black.withAlpha((0.3 * 255).toInt()),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -103,6 +113,7 @@ class _LoginPageState extends State<LoginPage> {
                       },
                     ),
                     const SizedBox(height: 16),
+                    // Password Field
                     TextFormField(
                       controller: _passwordController,
                       obscureText: _obscurePassword,
@@ -111,7 +122,7 @@ class _LoginPageState extends State<LoginPage> {
                         labelText: 'Password',
                         labelStyle: const TextStyle(color: Colors.white70),
                         filled: true,
-                        fillColor: Colors.black.withOpacity(0.3),
+                        fillColor: Colors.black.withAlpha((0.3 * 255).toInt()),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
@@ -140,13 +151,16 @@ class _LoginPageState extends State<LoginPage> {
                       },
                     ),
                     const SizedBox(height: 24),
+                    // Login Button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
                         onPressed: _isLoading ? null : _login,
                         style: ElevatedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 14),
-                          backgroundColor: Colors.blueAccent.withOpacity(0.9),
+                          backgroundColor: Colors.blueAccent.withAlpha(
+                            (0.9 * 255).toInt(),
+                          ),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
@@ -165,6 +179,7 @@ class _LoginPageState extends State<LoginPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    // Navigate to Register Page
                     GestureDetector(
                       onTap: () {
                         Navigator.pushReplacementNamed(context, '/register');

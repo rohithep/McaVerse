@@ -1,58 +1,107 @@
-import 'dart:math' as math;
-import 'package:flutter/material.dart';
+// dashboard_page.dart
+// Improved & cleaned-up version of your original DashboardPage
+// - Preserves glassmorphism, tilt/parallax, gradients & shadows
+// - Fixes deprecated Color.withOpacity -> Color.withValues(alpha: ...)
+// - Avoids exposing private types in public APIs (BirthdayUser is public)
+// - Keeps all Firestore streams for announcements, events, news, users (birthdays)
+// - Adds comments and small refactors for readability and reuse
 
-class DashboardPage extends StatelessWidget {
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:mcaverse/pages/academics_page.dart';
+import 'filter_page.dart';
+
+/// Public model to represent a birthday user.
+/// Made public to avoid exposing private types in a public API.
+class BirthdayUser {
+  final String name;
+  final String year; // yearOfStudy or similar display value
+  final String avatar;
+
+  const BirthdayUser({
+    required this.name,
+    required this.year,
+    required this.avatar,
+  });
+}
+
+/// Main dashboard page (stateful so we can use `mounted` checks and local state later)
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
   @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  @override
   Widget build(BuildContext context) {
+    // Current authenticated user (may be null if not signed in)
+    final user = FirebaseAuth.instance.currentUser;
+
+    // Friendly date string (e.g. "Tue, 23 Sep 2025")
     final today = DateTime.now();
     final dateStr =
-        "${_wday(today.weekday)}, ${today.day} ${_month(today.month)} ${today.year}";
+        "${wdayAbbr(today.weekday)}, ${today.day} ${monthAbbr(today.month)} ${today.year}";
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7FB),
       body: Stack(
         children: [
-          // soft gradient bg
-          const _BackgroundBlob(),
+          const _BackgroundBlob(), // decorative background
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header / Greeting
+                  // ---------------- Header / Greeting ----------------
                   Row(
                     children: [
                       Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Hi there 👋",
-                              style: TextStyle(
-                                color: Colors.blueGrey.shade400,
-                                fontSize: 14,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            const Text(
-                              "Welcome to McaVerse",
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              dateStr,
-                              style: TextStyle(
-                                color: Colors.blueGrey.shade600,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
+                        child: StreamBuilder<DocumentSnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection("users")
+                              .doc(user?.uid)
+                              .snapshots(),
+                          builder: (context, snap) {
+                            final data =
+                                (snap.data?.data() as Map<String, dynamic>?) ??
+                                {};
+                            final name = (data["name"] as String?)?.trim();
+                            final greetingName = (name == null || name.isEmpty)
+                                ? "there"
+                                : name;
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  "Hi $greetingName 👋",
+                                  style: TextStyle(
+                                    color: Colors.blueGrey.shade400,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  "Welcome to McaVerse",
+                                  style: TextStyle(
+                                    fontSize: 22,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  dateStr,
+                                  style: TextStyle(
+                                    color: Colors.blueGrey.shade600,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ),
                       const CircleAvatar(
@@ -65,11 +114,16 @@ class DashboardPage extends StatelessWidget {
                   ),
                   const SizedBox(height: 18),
 
-                  // Quick access grid (3D cards)
+                  // ---------------- Quick Access Grid ----------------
                   _SectionHeader(
                     title: "Quick Access",
                     trailing: TextButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        // optional: open customize bottom sheet
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Customize clicked")),
+                        );
+                      },
                       child: const Text("Customize"),
                     ),
                   ),
@@ -83,22 +137,15 @@ class DashboardPage extends StatelessWidget {
                     childAspectRatio: 1.15,
                     children: [
                       _QuickCard(
-                        title: "Q Papers",
-                        icon: Icons.description,
+                        title: "Academics",
+                        icon: Icons.school_rounded,
                         color: Colors.indigo,
-                        onTap: () => _go(context, "/questions"),
-                      ),
-                      _QuickCard(
-                        title: "Notes",
-                        icon: Icons.menu_book_rounded,
-                        color: Colors.green,
-                        onTap: () => _go(context, "/notes"),
-                      ),
-                      _QuickCard(
-                        title: "Syllabus",
-                        icon: Icons.list_alt_rounded,
-                        color: Colors.orange,
-                        onTap: () => _go(context, "/syllabus"),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const AcademicsPage(),
+                          ),
+                        ),
                       ),
                       _QuickCard(
                         title: "Events",
@@ -114,166 +161,187 @@ class DashboardPage extends StatelessWidget {
                         onTap: () => _go(context, "/announcements"),
                       ),
                       _QuickCard(
-                        title: "Recorded",
-                        icon: Icons.play_circle_fill_rounded,
-                        color: Colors.teal,
-                        onTap: () => _go(context, "/recordings"),
+                        title: "Donation",
+                        icon: Icons.volunteer_activism_rounded,
+                        color: Colors.pink,
+                        onTap: () => _go(context, "/donation"),
+                      ),
+                      _QuickCard(
+                        title: "Filter Users",
+                        icon: Icons.filter_alt_rounded,
+                        color: Colors.blueGrey,
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const FilterPage()),
+                        ),
                       ),
                     ],
                   ),
 
                   const SizedBox(height: 24),
 
-                  // Announcements
+                  // ---------------- Announcements (Firestore) ----------------
                   const _SectionHeader(title: "Announcements"),
                   const SizedBox(height: 12),
-                  _AnnouncementTile(
-                    title: "Hackathon 2025 – Registrations Live",
-                    subtitle: "Register by Aug 30 • Dept. Lab",
-                    color: Colors.redAccent,
-                    onTap: () => _go(context, "/announcements/1"),
-                  ),
-                  _AnnouncementTile(
-                    title: "DBMS Notes (2nd Yr) Uploaded",
-                    subtitle: "Unit 1–3 added • Dr. Meera",
-                    color: Colors.orange,
-                    onTap: () => _go(context, "/announcements/2"),
-                  ),
-                  _AnnouncementTile(
-                    title: "Seminar: Cloud Native 101",
-                    subtitle: "Sep 10, 10 AM • Auditorium",
-                    color: Colors.indigo,
-                    onTap: () => _go(context, "/announcements/3"),
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection("announcements")
+                        .orderBy("timestamp", descending: true)
+                        .limit(6)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return Text(
+                          "No announcements yet.",
+                          style: TextStyle(color: Colors.blueGrey.shade600),
+                        );
+                      }
+                      return Column(
+                        children: snapshot.data!.docs.map((doc) {
+                          final d = doc.data() as Map<String, dynamic>;
+                          return _AnnouncementTile(
+                            title: (d["title"] ?? "Untitled").toString(),
+                            subtitle: (d["subtitle"] ?? "").toString(),
+                            color: Colors.redAccent,
+                            onTap: () =>
+                                _go(context, "/announcements/${doc.id}"),
+                          );
+                        }).toList(),
+                      );
+                    },
                   ),
 
                   const SizedBox(height: 24),
 
-                  // Upcoming Events (Horizontal)
+                  // ---------------- Upcoming Events (horizontal) ----------------
                   const _SectionHeader(title: "Upcoming Events"),
                   const SizedBox(height: 12),
                   SizedBox(
                     height: 170,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: const [
-                        _EventCard(
-                          title: "Tech Talk",
-                          date: "Aug 30",
-                          color: Colors.blue,
-                        ),
-                        _EventCard(
-                          title: "Workshop",
-                          date: "Sep 10",
-                          color: Colors.green,
-                        ),
-                        _EventCard(
-                          title: "Freshers Fest",
-                          date: "Sep 20",
-                          color: Colors.purple,
-                        ),
-                      ],
+                    child: StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection("events")
+                          .orderBy("date")
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        final docs = snapshot.data?.docs ?? [];
+                        if (docs.isEmpty) {
+                          return Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              "No upcoming events.",
+                              style: TextStyle(color: Colors.blueGrey.shade600),
+                            ),
+                          );
+                        }
+                        return ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: docs.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 12),
+                          itemBuilder: (_, i) {
+                            final d = docs[i].data() as Map<String, dynamic>;
+                            return _EventCard(
+                              title: (d["title"] ?? "Event").toString(),
+                              date: _formatEventDate(d["date"]),
+                              color: Colors.blue,
+                            );
+                          },
+                        );
+                      },
                     ),
                   ),
 
                   const SizedBox(height: 24),
 
-                  // Community (Polls + Birthday Alerts)
-                  const _SectionHeader(title: "Community"),
+                  // ---------------- Birthdays (derived from users collection) ----------------
+                  const _SectionHeader(title: "Birthdays Today"),
                   const SizedBox(height: 12),
-                  _Tilt3D(
-                    child: _GlassCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _CardTitle(
-                            icon: Icons.poll_rounded,
-                            color: Colors.deepPurple,
-                            title: "Polls & Surveys",
-                            trailing: TextButton(
-                              onPressed: () => _go(context, "/polls"),
-                              child: const Text("View all"),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const _PollItem(
-                            question:
-                                "Which domain should next workshop focus on?",
-                            options: ["Flutter", "GenAI", "Cloud", "DSA"],
-                          ),
-                          const SizedBox(height: 12),
-                          const _PollItem(
-                            question: "Preferred hackathon duration?",
-                            options: ["12h", "24h", "48h"],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  _Tilt3D(
-                    child: _GlassCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _CardTitle(
-                            icon: Icons.cake_rounded,
-                            color: Colors.pinkAccent,
-                            title: "Birthdays Today",
-                            trailing: TextButton(
-                              onPressed: () =>
-                                  _go(context, "/community/birthdays"),
-                              child: const Text("Celebrate"),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const _BirthdayRow(
-                            users: [
-                              _BirthdayUser(
-                                name: "Rohith",
-                                year: "2nd Yr",
-                                avatar: "assets/images/avatar_placeholder.png",
-                              ),
-                              _BirthdayUser(
-                                name: "Aisha",
-                                year: "1st Yr",
-                                avatar: "assets/images/avatar_placeholder.png",
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection("users")
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final today = DateTime.now();
+                      // Map Firestore docs into BirthdayUser only for those matching today
+                      final users = (snapshot.data?.docs ?? [])
+                          .where((doc) => _isBirthdayToday(doc['dob'], today))
+                          .map((doc) {
+                            final d = doc.data() as Map<String, dynamic>;
+                            return BirthdayUser(
+                              name: (d["name"] ?? "Unknown").toString(),
+                              year: (d["yearOfStudy"] ?? "").toString(),
+                              avatar:
+                                  (d["profileImageUrl"] ??
+                                          "https://ui-avatars.com/api/?name=${Uri.encodeComponent((d['name'] ?? 'U').toString())}")
+                                      .toString(),
+                            );
+                          })
+                          .toList();
+
+                      if (users.isEmpty) {
+                        return Text(
+                          "No birthdays today 🎉",
+                          style: TextStyle(color: Colors.blueGrey.shade600),
+                        );
+                      }
+                      return BirthdayRow(users: users);
+                    },
                   ),
 
                   const SizedBox(height: 24),
 
-                  // Tech News Feed
+                  // ---------------- Tech News Feed ----------------
                   const _SectionHeader(title: "Tech News Feed"),
                   const SizedBox(height: 12),
-                  _NewsCard(
-                    source: "The Verge",
-                    title:
-                        "Flutter 4.0: New rendering boosts performance on web",
-                    onTap: () => _go(context, "/news/1"),
-                  ),
-                  _NewsCard(
-                    source: "Hacker News",
-                    title: "Open-source GenAI tooling for on-device inference",
-                    onTap: () => _go(context, "/news/2"),
-                  ),
-                  _NewsCard(
-                    source: "InfoQ",
-                    title: "Serverless patterns for event-driven microservices",
-                    onTap: () => _go(context, "/news/3"),
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection("news")
+                        .orderBy("timestamp", descending: true)
+                        .limit(8)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState == ConnectionState.waiting) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                        return Text(
+                          "No news yet.",
+                          style: TextStyle(color: Colors.blueGrey.shade600),
+                        );
+                      }
+                      return Column(
+                        children: snapshot.data!.docs.map((doc) {
+                          final d = doc.data() as Map<String, dynamic>;
+                          return _NewsCard(
+                            source: (d["source"] ?? "Unknown").toString(),
+                            title: (d["title"] ?? "No Title").toString(),
+                            onTap: () => _go(context, "/news/${doc.id}"),
+                          );
+                        }).toList(),
+                      );
+                    },
                   ),
 
                   const SizedBox(height: 24),
 
-                  // Quick Links
+                  // ---------------- Quick Links ----------------
                   const _SectionHeader(title: "Quick Links"),
                   const SizedBox(height: 10),
-                  const _QuickLinksRow(
-                    links: [
+                  _QuickLinksRow(
+                    links: const [
                       _QuickLink("Classroom", Icons.class_rounded),
                       _QuickLink("Library", Icons.local_library_rounded),
                       _QuickLink("Website", Icons.public_rounded),
@@ -289,39 +357,124 @@ class DashboardPage extends StatelessWidget {
     );
   }
 
-  static String _month(int m) {
-    const mm = [
-      "",
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-    return mm[m];
-  }
-
-  static String _wday(int w) {
-    const wd = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-    return wd[w];
-  }
-
+  // Simple helper to surface navigation routes (currently placeholder)
   static void _go(BuildContext context, String route) {
-    // Plug your actual routes here
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(SnackBar(content: Text("Navigate → $route")));
   }
+
+  // Formats events stored as Timestamp, DateTime or string "yyyy-mm-dd" etc.
+  static String _formatEventDate(dynamic val) {
+    if (val == null) return "";
+    if (val is Timestamp) {
+      final dt = val.toDate();
+      return "${monthAbbr(dt.month)} ${dt.day}";
+    }
+    if (val is DateTime) {
+      return "${monthAbbr(val.month)} ${val.day}";
+    }
+    final s = val.toString();
+    final iso = RegExp(r'^(\d{4})-(\d{2})-(\d{2})$');
+    final m = iso.firstMatch(s);
+    if (m != null) {
+      final month = int.tryParse(m.group(2) ?? "0") ?? 0;
+      final day = int.tryParse(m.group(3) ?? "0") ?? 0;
+      return "${monthAbbr(month)} $day";
+    }
+    return s;
+  }
 }
 
-/* ----------------------------- Decor / Common ----------------------------- */
+/* ----------------------------- Helpers / Decor ----------------------------- */
+
+/// Month abbreviation without intl
+String monthAbbr(int m) {
+  const mm = [
+    "",
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  if (m < 1 || m > 12) return "";
+  return mm[m];
+}
+
+/// Weekday abbreviation without intl
+String wdayAbbr(int w) {
+  const wd = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  if (w < 1 || w > 7) return "";
+  return wd[w];
+}
+
+/// Robust birthday checker (handles Timestamp, DateTime, "yyyy-mm-dd", "dd/mm", "dd-mm", compact digits)
+bool _isBirthdayToday(dynamic dob, DateTime today) {
+  if (dob == null) return false;
+
+  // Timestamp
+  if (dob is Timestamp) {
+    final dt = dob.toDate();
+    return dt.day == today.day && dt.month == today.month;
+  }
+
+  // DateTime
+  if (dob is DateTime) {
+    return dob.day == today.day && dob.month == today.month;
+  }
+
+  final s = dob.toString().trim();
+  if (s.isEmpty) return false;
+
+  // ISO yyyy-mm-dd
+  final iso = RegExp(r'^(\d{4})-(\d{1,2})-(\d{1,2})$');
+  final mIso = iso.firstMatch(s);
+  if (mIso != null) {
+    final mm = int.tryParse(mIso.group(2) ?? "0") ?? 0;
+    final dd = int.tryParse(mIso.group(3) ?? "0") ?? 0;
+    return dd == today.day && mm == today.month;
+  }
+
+  // dd-mm or dd/mm or d-m
+  final dm = RegExp(r'^(\d{1,2})[-/](\d{1,2})$');
+  final mDm = dm.firstMatch(s);
+  if (mDm != null) {
+    final dd = int.tryParse(mDm.group(1)!) ?? -1;
+    final mm = int.tryParse(mDm.group(2)!) ?? -1;
+    return dd == today.day && mm == today.month;
+  }
+
+  // Compact digits like "66" -> 6/6, "1309" -> 13/09
+  final digits = RegExp(r'^\d{2,4}$');
+  if (digits.hasMatch(s)) {
+    int dd = -1, mm = -1;
+    if (s.length == 2) {
+      dd = int.parse(s[0]);
+      mm = int.parse(s[1]);
+    } else if (s.length == 3) {
+      dd = int.parse(s.substring(0, 2));
+      mm = int.parse(s.substring(2));
+    } else if (s.length == 4) {
+      dd = int.parse(s.substring(0, 2));
+      mm = int.parse(s.substring(2, 4));
+    }
+    if (dd > 0 && mm > 0) {
+      return dd == today.day && mm == today.month;
+    }
+  }
+
+  return false;
+}
+
+/* ----------------------------- Background Blob ---------------------------- */
 
 class _BackgroundBlob extends StatelessWidget {
   const _BackgroundBlob();
@@ -337,6 +490,7 @@ class _BackgroundBlob extends StatelessWidget {
 class _BlobPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
+    // Base gradient
     final g1 = Paint()
       ..shader = const LinearGradient(
         colors: [Color(0xFFEEF5FF), Color(0xFFF8FAFF)],
@@ -345,14 +499,15 @@ class _BlobPainter extends CustomPainter {
       ).createShader(Offset.zero & size);
     canvas.drawRect(Offset.zero & size, g1);
 
+    // Soft blurred blobs using precise alpha values
     final paint = Paint()
-      ..color = const Color(0xFFCCE0FF).withOpacity(0.35)
+      ..color = const Color(0xFFCCE0FF).withValues(alpha: 0.35)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 50);
     final paint2 = Paint()
-      ..color = const Color(0xFFB3E5FC).withOpacity(0.35)
+      ..color = const Color(0xFFB3E5FC).withValues(alpha: 0.35)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 60);
 
-    canvas.drawCircle(Offset(size.width * .15, size.height * .1), 90, paint);
+    canvas.drawCircle(Offset(size.width * .15, size.height * .12), 90, paint);
     canvas.drawCircle(Offset(size.width * .9, size.height * .18), 120, paint2);
   }
 
@@ -360,10 +515,13 @@ class _BlobPainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
+/* -------------------------------- Sections -------------------------------- */
+
 class _SectionHeader extends StatelessWidget {
   final String title;
   final Widget? trailing;
-  const _SectionHeader({required this.title, this.trailing, super.key});
+
+  const _SectionHeader({required this.title, this.trailing});
 
   @override
   Widget build(BuildContext context) {
@@ -380,6 +538,8 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+/* --------------------------------- Glass Card ----------------------------- */
+
 class _GlassCard extends StatelessWidget {
   final Widget child;
   const _GlassCard({required this.child});
@@ -390,12 +550,12 @@ class _GlassCard extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        color: Colors.white.withOpacity(.75),
-        boxShadow: [
+        color: const Color(0xBFFFFFFF),
+        boxShadow: const [
           BoxShadow(
-            color: Colors.black.withOpacity(.05),
+            color: Color(0x0D000000),
             blurRadius: 18,
-            offset: const Offset(0, 10),
+            offset: Offset(0, 10),
           ),
         ],
         border: Border.all(color: Colors.white, width: 1),
@@ -405,7 +565,8 @@ class _GlassCard extends StatelessWidget {
   }
 }
 
-/// Reusable 3D tilt wrapper (subtle parallax on drag/hover)
+/* ------------------------------ Tilt 3D effect ---------------------------- */
+
 class _Tilt3D extends StatefulWidget {
   final Widget child;
   const _Tilt3D({required this.child});
@@ -428,9 +589,9 @@ class _Tilt3DState extends State<_Tilt3D> {
     final dy = (localPos.dy - size.height / 2) / (size.height / 2);
 
     setState(() {
-      _ry = dx * 0.22; // rotate Y by x movement
-      _rx = -dy * 0.22; // rotate X by y movement
-      _z = (dx.abs() + dy.abs()) * 6; // small elevation on edges
+      _ry = dx * 0.22;
+      _rx = -dy * 0.22;
+      _z = (dx.abs() + dy.abs()) * 6;
     });
   }
 
@@ -447,7 +608,6 @@ class _Tilt3DState extends State<_Tilt3D> {
             final local = rb.globalToLocal(e.position);
             _update(local, rb.size);
           },
-          onPointerDown: (_) {},
           onPointerUp: (_) => _reset(),
           onPointerCancel: (_) => _reset(),
           child: Transform(
@@ -466,7 +626,7 @@ class _Tilt3DState extends State<_Tilt3D> {
   }
 }
 
-/* ------------------------------ Quick Access ------------------------------ */
+/* ------------------------------ Quick Card -------------------------------- */
 
 class _QuickCard extends StatelessWidget {
   final String title;
@@ -493,22 +653,21 @@ class _QuickCard extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
             gradient: LinearGradient(
-              colors: [color.withOpacity(.1), Colors.white],
+              colors: [color.withValues(alpha: 0.1), Colors.white],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ),
             boxShadow: [
               BoxShadow(
-                color: color.withOpacity(.18),
+                color: color.withValues(alpha: 0.18),
                 blurRadius: 16,
                 offset: const Offset(0, 10),
               ),
             ],
-            border: Border.all(color: color.withOpacity(.18)),
+            border: Border.all(color: color.withValues(alpha: 0.18)),
           ),
           child: Stack(
             children: [
-              // Decorative corner arc
               Positioned(
                 right: -24,
                 top: -24,
@@ -517,7 +676,7 @@ class _QuickCard extends StatelessWidget {
                   height: 90,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: color.withOpacity(.08),
+                    color: color.withValues(alpha: 0.08),
                   ),
                 ),
               ),
@@ -569,7 +728,7 @@ class _QuickCard extends StatelessWidget {
   }
 }
 
-/* ---------------------------- Announcements list -------------------------- */
+/* ---------------------------- Announcement tile -------------------------- */
 
 class _AnnouncementTile extends StatelessWidget {
   final String title;
@@ -590,7 +749,7 @@ class _AnnouncementTile extends StatelessWidget {
       child: _GlassCard(
         child: ListTile(
           leading: CircleAvatar(
-            backgroundColor: color.withOpacity(.12),
+            backgroundColor: color.withValues(alpha: 0.12),
             child: Icon(Icons.campaign_rounded, color: color),
           ),
           title: Text(
@@ -676,6 +835,7 @@ class _EventCard extends StatelessWidget {
 
 /* --------------------------------- Polls --------------------------------- */
 
+// Poll UI kept simple and reusable; you can wire options to Firestore later.
 class _PollItem extends StatelessWidget {
   final String question;
   final List<String> options;
@@ -721,7 +881,7 @@ class _PollBoxState extends State<_PollBox> {
                 label: Text(o),
                 selected: active,
                 onSelected: (_) => setState(() => selected = o),
-                selectedColor: Colors.indigo.withOpacity(.15),
+                selectedColor: Colors.indigo.withValues(alpha: 0.15),
                 labelStyle: TextStyle(
                   fontWeight: FontWeight.w600,
                   color: active ? Colors.indigo : Colors.black87,
@@ -761,22 +921,12 @@ class _PollBoxState extends State<_PollBox> {
   }
 }
 
-/* ------------------------------ Birthday row ------------------------------ */
+/* ------------------------------ Birthday Row ------------------------------ */
 
-class _BirthdayUser {
-  final String name;
-  final String year;
-  final String avatar;
-  const _BirthdayUser({
-    required this.name,
-    required this.year,
-    required this.avatar,
-  });
-}
-
-class _BirthdayRow extends StatelessWidget {
-  final List<_BirthdayUser> users;
-  const _BirthdayRow({required this.users});
+class BirthdayRow extends StatelessWidget {
+  // Accept public BirthdayUser model
+  final List<BirthdayUser> users;
+  const BirthdayRow({super.key, required this.users});
 
   @override
   Widget build(BuildContext context) {
@@ -786,6 +936,7 @@ class _BirthdayRow extends StatelessWidget {
         style: TextStyle(color: Colors.blueGrey.shade600),
       );
     }
+
     return SizedBox(
       height: 86,
       child: ListView.separated(
@@ -794,40 +945,40 @@ class _BirthdayRow extends StatelessWidget {
         separatorBuilder: (_, __) => const SizedBox(width: 12),
         itemBuilder: (_, i) {
           final u = users[i];
-          return _Tilt3D(
-            child: Container(
-              width: 200,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.pinkAccent.withOpacity(.12),
-                    blurRadius: 14,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-                border: Border.all(color: Colors.pinkAccent.withOpacity(.18)),
+          return Container(
+            width: 200,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.pinkAccent.withValues(alpha: 0.12),
+                  blurRadius: 14,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+              border: Border.all(
+                color: Colors.pinkAccent.withValues(alpha: 0.18),
               ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundImage: AssetImage(u.avatar),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundImage: NetworkImage(u.avatar),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    "${u.name} • ${u.year}",
+                    style: const TextStyle(fontWeight: FontWeight.w700),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      "${u.name} • ${u.year}",
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  const Icon(Icons.cake_rounded, color: Colors.pinkAccent),
-                ],
-              ),
+                ),
+                const SizedBox(width: 6),
+                const Icon(Icons.cake_rounded, color: Colors.pinkAccent),
+              ],
             ),
           );
         },
@@ -836,7 +987,7 @@ class _BirthdayRow extends StatelessWidget {
   }
 }
 
-/* ------------------------------- News cards -------------------------------- */
+/* -------------------------------- News Card ------------------------------- */
 
 class _NewsCard extends StatelessWidget {
   final String source;
@@ -871,7 +1022,7 @@ class _NewsCard extends StatelessWidget {
   }
 }
 
-/* ------------------------------ Quick Links -------------------------------- */
+/* ------------------------------ Quick Links Row --------------------------- */
 
 class _QuickLink {
   final String label;
@@ -904,7 +1055,7 @@ class _QuickLinksRow extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(.06),
+                    color: Colors.black.withValues(alpha: .06),
                     blurRadius: 12,
                     offset: const Offset(0, 6),
                   ),
@@ -951,7 +1102,7 @@ class _CardTitle extends StatelessWidget {
       children: [
         CircleAvatar(
           radius: 16,
-          backgroundColor: color.withOpacity(.12),
+          backgroundColor: color.withValues(alpha: .12),
           child: Icon(icon, color: color, size: 18),
         ),
         const SizedBox(width: 8),

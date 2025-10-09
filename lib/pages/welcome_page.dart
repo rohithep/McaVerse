@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:math';
 import 'register_page.dart';
 
 class WelcomePage extends StatefulWidget {
@@ -10,56 +11,92 @@ class WelcomePage extends StatefulWidget {
 
 class _WelcomePageState extends State<WelcomePage>
     with TickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _opacityAnimation;
+  late AnimationController _titleController;
+  late AnimationController _buttonController;
+  late AnimationController _particleController;
+
+  late Animation<double> _fadeTitle;
+  late Animation<Offset> _slideTitle;
 
   @override
   void initState() {
     super.initState();
 
-    _controller = AnimationController(
+    _titleController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 1),
+      duration: const Duration(milliseconds: 1200),
     )..forward();
 
-    _opacityAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
+    _buttonController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    );
+
+    _fadeTitle = CurvedAnimation(
+      parent: _titleController,
+      curve: Curves.easeIn,
+    );
+
+    _slideTitle = Tween<Offset>(
+      begin: const Offset(0, -0.3),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _titleController, curve: Curves.easeOut));
+
+    Future.delayed(const Duration(milliseconds: 800), () {
+      _buttonController.forward();
+    });
+
+    // Particle animation controller
+    _particleController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 20),
+    )..repeat();
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    _titleController.dispose();
+    _buttonController.dispose();
+    _particleController.dispose();
     super.dispose();
   }
 
-  Widget _buildButton(String text, VoidCallback onPressed) {
+  Widget _glassButton(String text, VoidCallback onPressed) {
     return FadeTransition(
-      opacity: _opacityAnimation,
-      child: TextButton(
-        style: TextButton.styleFrom(
-          minimumSize: const Size(180, 42),
-          backgroundColor: Colors.blueAccent.withValues(alpha: 0.85),
+      opacity: _buttonController,
+      child: SlideTransition(
+        position: Tween<Offset>(begin: const Offset(0, 0.3), end: Offset.zero)
+            .animate(
+              CurvedAnimation(parent: _buttonController, curve: Curves.easeOut),
+            ),
+        child: Container(
+          margin: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.1),
 
-          foregroundColor: Colors.white,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        onPressed: onPressed,
-        child: Text(text, style: const TextStyle(fontSize: 16)),
-      ),
-    );
-  }
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.2),
 
-  Widget _buildFooterLink(String text, VoidCallback onPressed) {
-    return GestureDetector(
-      onTap: onPressed,
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: Colors.white70,
-          fontSize: 14,
-          decoration: TextDecoration.underline,
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: TextButton(
+            style: TextButton.styleFrom(
+              minimumSize: const Size(220, 52),
+              foregroundColor: Colors.white,
+              textStyle: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            onPressed: onPressed,
+            child: Text(text),
+          ),
         ),
       ),
     );
@@ -68,93 +105,136 @@ class _WelcomePageState extends State<WelcomePage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          image: DecorationImage(
-            image: AssetImage(
-              'assets/images/ChatGPT Image Aug 13, 2025, 04_51_55 PM.png',
+      body: Stack(
+        children: [
+          // Gradient Background
+          Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Color(0xFF0F2027),
+                  Color(0xFF203A43),
+                  Color(0xFF2C5364),
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
             ),
-            fit: BoxFit.cover,
           ),
-        ),
-        child: Container(
-          color: Colors.black.withValues(alpha: 0.3),
-          child: SafeArea(
+
+          // Floating Animated Particles
+          AnimatedBuilder(
+            animation: _particleController,
+            builder: (context, child) {
+              return CustomPaint(
+                painter: ParticlePainter(_particleController.value),
+                size: Size.infinite,
+              );
+            },
+          ),
+
+          // Content
+          SafeArea(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Logo / App Name
-                Column(
-                  children: const [
-                    SizedBox(height: 60),
-                    Text(
-                      "McaVerse",
-                      style: TextStyle(
-                        fontSize: 36,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black,
-                      ),
-                    ),
-                    SizedBox(height: 6),
-                    Text(
-                      "Welcome to the MCA Association App",
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Color.fromARGB(179, 0, 0, 0),
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-
-                // Main Buttons
-                Column(
-                  children: [
-                    _buildButton('Login', () {
-                      Navigator.pushNamed(context, '/login');
-                    }),
-                    const SizedBox(height: 10),
-                    _buildButton('Register', () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const RegisterPage()),
-                      );
-                    }),
-
-                    const SizedBox(height: 10),
-                    _buildButton('Login as Guest', () {
-                      // You can implement guest login or navigate to home directly
-                      Navigator.pushReplacementNamed(context, '/home');
-                    }),
-                  ],
-                ),
-
-                // Footer with About, Contacts, and ©
-                Column(
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                // Center section (title + tagline + buttons)
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        _buildFooterLink('About', () {}),
-                        const SizedBox(width: 20),
-                        _buildFooterLink('Contacts', () {}),
+                        // Title + Tagline
+                        FadeTransition(
+                          opacity: _fadeTitle,
+                          child: SlideTransition(
+                            position: _slideTitle,
+                            child: Column(
+                              children: const [
+                                Text(
+                                  "McaVerse",
+                                  style: TextStyle(
+                                    fontSize: 42,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                    letterSpacing: 1.2,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                                SizedBox(height: 10),
+                                Text(
+                                  "Your Gateway to MCA Association",
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.white70,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 40),
+
+                        // Buttons
+                        _glassButton("Login", () {
+                          Navigator.pushNamed(context, '/login');
+                        }),
+                        _glassButton("Register", () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const RegisterPage(),
+                            ),
+                          );
+                        }),
+                        _glassButton("Login as Guest", () {
+                          Navigator.pushReplacementNamed(context, '/home');
+                        }),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      "© Rohith EP",
-                      style: TextStyle(fontSize: 12, color: Colors.white70),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+                  ),
+                ),
+
+                // Footer at bottom
+                const Padding(
+                  padding: EdgeInsets.only(bottom: 20),
+                  child: Text(
+                    "© Rohith EP",
+                    style: TextStyle(fontSize: 12, color: Colors.white60),
+                  ),
                 ),
               ],
             ),
           ),
-        ),
+        ],
       ),
     );
   }
+}
+
+/// Particle Painter for floating circles with animation
+class ParticlePainter extends CustomPainter {
+  final double progress;
+
+  final int particleCount = 80;
+
+  ParticlePainter(this.progress);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = Colors.white.withValues(alpha: 0.08);
+
+    for (int i = 0; i < particleCount; i++) {
+      final dx = (i * 73 % size.width) + 50 * sin(progress * 2 * pi + i);
+      final dy =
+          (i * 101 % size.height) + 40 * cos(progress * 2 * pi + i * 1.3);
+
+      final radius = (i % 3 + 1).toDouble();
+      canvas.drawCircle(Offset(dx, dy), radius, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }

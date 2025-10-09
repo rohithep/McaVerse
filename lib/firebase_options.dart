@@ -21,11 +21,11 @@ class DefaultFirebaseOptions {
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
         return FirebaseOptions(
-          apiKey: "YOUR_ANDROID_API_KEY",
-          appId: "YOUR_ANDROID_APP_ID",
+          apiKey: "AIzaSyB3O_b2iLWD-yFCGIJ4vSXlL0YF0_o2qSQ",
+          appId: "1:732036970603:android:b4bea308896e36da97992e",
           messagingSenderId: "YOUR_ANDROID_SENDER_ID",
-          projectId: "YOUR_PROJECT_ID",
-          storageBucket: "YOUR_PROJECT_ID.appspot.com",
+          projectId: "732036970603",
+          storageBucket: "mcaverse-1571e.firebasestorage.app",
         );
       case TargetPlatform.iOS:
         return FirebaseOptions(

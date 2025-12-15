@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:math';
+import 'home_page.dart';
+import 'faculty/faculty_homepage.dart';
+import 'alumini/alumni_dashboard.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -22,7 +26,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
-
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -40,13 +43,54 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     setState(() => _isLoading = true);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
+      UserCredential userCred = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
+
+      // Fetch user role from Firestore
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCred.user!.uid)
+          .get();
+
+      String role = userDoc.data()?['status'] ?? 'Student';
+
+      // Determine next page based on role
+      Widget nextPage;
+      if (role == 'Faculty') {
+        nextPage = const FacultyHomepage();
+      } else if (role == 'Alumni') {
+        nextPage = const AlumniDashboardPage();
+      } else {
+        nextPage = const HomePage();
+      }
 
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/home');
+      Navigator.of(context).pushReplacement(
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => nextPage,
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            const beginOffset = Offset(0, 0.3);
+            const endOffset = Offset.zero;
+            final tweenOffset = Tween(
+              begin: beginOffset,
+              end: endOffset,
+            ).chain(CurveTween(curve: Curves.easeInOut));
+            final tweenOpacity = Tween<double>(begin: 0, end: 1);
+
+            return SlideTransition(
+              position: animation.drive(tweenOffset),
+              child: FadeTransition(
+                opacity: animation.drive(tweenOpacity),
+                child: child,
+              ),
+            );
+          },
+          transitionDuration: const Duration(milliseconds: 500),
+        ),
+      );
     } on FirebaseAuthException catch (e) {
       String message = 'Login failed';
       if (e.code == 'user-not-found') {
@@ -199,7 +243,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         ),
                         const SizedBox(height: 32),
 
-                        // Email & Password
                         _glassInputField(
                           label: "Email",
                           icon: Icons.email_outlined,
@@ -214,7 +257,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         ),
                         const SizedBox(height: 24),
 
-                        // Login Button
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
@@ -244,7 +286,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         ),
                         const SizedBox(height: 16),
 
-                        // Register Link
                         GestureDetector(
                           onTap: () {
                             Navigator.pushReplacementNamed(
@@ -276,7 +317,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 /// Particle Painter for background floating dots
 class ParticlePainter extends CustomPainter {
   final double progress;
-
   final int particleCount = 80;
 
   ParticlePainter(this.progress);

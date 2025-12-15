@@ -1,4 +1,4 @@
-// file: student_academics_page.dart
+// file: faculty_academics_page.dart
 import 'dart:convert';
 import 'dart:io' show File, Platform;
 import 'dart:typed_data';
@@ -7,8 +7,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
+import 'package:path/path.dart' as p;
 import 'package:url_launcher/url_launcher.dart';
 import 'package:dio/dio.dart';
 import 'package:path_provider/path_provider.dart';
@@ -16,9 +18,10 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:video_player/video_player.dart';
 
-/// Student Academics page - View and download only (no upload/delete)
-class AcademicsPage extends StatelessWidget {
-  const AcademicsPage({super.key});
+/// Full Faculty Academics page with Cloudinary uploads (images + PDFs/raw).
+/// Configure cloudName & uploadPreset below.
+class FacultyAcademicsPage extends StatelessWidget {
+  const FacultyAcademicsPage({super.key});
 
   final List<Map<String, dynamic>> categories = const [
     {
@@ -69,12 +72,19 @@ class AcademicsPage extends StatelessWidget {
                   icon: cat['icon'],
                   color: cat['color'],
                   onTap: () {
+                    if (user == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Please login first")),
+                      );
+                      return;
+                    }
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => StudentFolderListPage(
+                        builder: (_) => FolderListPage(
                           categoryId: cat['id'],
                           categoryTitle: cat['title'],
+                          currentUser: user,
                         ),
                       ),
                     );
@@ -132,14 +142,16 @@ class _FolderCard extends StatelessWidget {
   }
 }
 
-class StudentFolderListPage extends StatelessWidget {
+class FolderListPage extends StatelessWidget {
   final String categoryId;
   final String categoryTitle;
+  final User currentUser;
 
-  const StudentFolderListPage({
+  const FolderListPage({
     super.key,
     required this.categoryId,
     required this.categoryTitle,
+    required this.currentUser,
   });
 
   @override
@@ -151,7 +163,50 @@ class StudentFolderListPage extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(title: Text(categoryTitle)),
-      // No FAB for students - they can't create folders
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.create_new_folder),
+        onPressed: () async {
+          String folderName = '';
+          await showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: const Text("Create Folder"),
+              content: TextField(
+                onChanged: (val) => folderName = val,
+                decoration: const InputDecoration(hintText: "Folder Name"),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text("Cancel"),
+                ),
+                TextButton(
+                  onPressed: () async {
+                    if (folderName.isNotEmpty) {
+                      try {
+                        await folderCollection.add({
+                          'folderName': folderName,
+                          'createdBy': currentUser.uid,
+                          'createdAt': Timestamp.now(),
+                        });
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Folder created!")),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(
+                          context,
+                        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+                      }
+                    }
+                  },
+                  child: const Text("Create"),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: folderCollection.orderBy('createdAt').snapshots(),
         builder: (context, snapshot) {
@@ -160,7 +215,7 @@ class StudentFolderListPage extends StatelessWidget {
           final folders = snapshot.data!.docs;
 
           if (folders.isEmpty) {
-            return const Center(child: Text("No folders available yet."));
+            return const Center(child: Text("No folders created yet."));
           }
 
           return ListView.builder(
@@ -175,10 +230,11 @@ class StudentFolderListPage extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => StudentFileViewPage(
+                      builder: (_) => FileUploadPage(
                         categoryId: categoryId,
                         folderId: folder.id,
                         folderName: folderName,
+                        currentUser: currentUser,
                       ),
                     ),
                   );
@@ -192,24 +248,32 @@ class StudentFolderListPage extends StatelessWidget {
   }
 }
 
-// ===================== Student File View Page (View/Download Only) =====================
-class StudentFileViewPage extends StatefulWidget {
+// ===================== Stateful FileUploadPage (Option C - Hybrid UI) =====================
+class FileUploadPage extends StatefulWidget {
   final String categoryId;
   final String folderId;
   final String folderName;
+  final User currentUser;
 
-  const StudentFileViewPage({
+  const FileUploadPage({
     super.key,
     required this.categoryId,
     required this.folderId,
     required this.folderName,
+    required this.currentUser,
   });
 
   @override
-  State<StudentFileViewPage> createState() => _StudentFileViewPageState();
+  State<FileUploadPage> createState() => _FileUploadPageState();
 }
 
-class _StudentFileViewPageState extends State<StudentFileViewPage> {
+class _FileUploadPageState extends State<FileUploadPage> {
+  // ====== Configure these ======
+  static const String cloudName = 'dhwt8lr4p'; // <-- set your cloud name
+  static const String uploadPreset = 'McaVerse'; // <-- set your unsigned preset
+  static const String cloudinaryDeleteEndpoint = ''; // backend endpoint to delete from Cloudinary (optional)
+  // =============================
+
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String _filter = 'all'; // 'all', 'pdf', 'image', 'video', 'other'
@@ -229,7 +293,187 @@ class _StudentFileViewPageState extends State<StudentFileViewPage> {
     super.dispose();
   }
 
-  // ------------------ helpers for in-app viewing & downloading ------------------
+  Future<void> _uploadWithMetadata() async {
+    final user = widget.currentUser;
+    if (user == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please login first")));
+      return;
+    }
+
+    String title = '';
+    String description = '';
+
+    // Ask for title & description first
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Upload file - details'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              decoration: const InputDecoration(labelText: 'Title (required)'),
+              onChanged: (v) => title = v,
+            ),
+            TextField(
+              decoration: const InputDecoration(labelText: 'Short description (optional)'),
+              onChanged: (v) => description = v,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Continue')),
+        ],
+      ),
+    );
+
+    if (ok != true) return;
+    if (title.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Title is required')));
+      return;
+    }
+
+    try {
+      final result = await FilePicker.platform.pickFiles(allowMultiple: false);
+      if (result == null || result.files.isEmpty) return;
+      final picked = result.files.first;
+      final fileName = picked.name;
+      final fileExt = picked.extension ?? '';
+
+      final mimeType = lookupMimeType(fileName, headerBytes: picked.bytes) ?? '';
+      final isPdf = mimeType.toLowerCase().contains('pdf') || fileExt.toLowerCase() == 'pdf';
+
+      final uploadEndpoint = isPdf ? 'raw/upload' : 'auto/upload';
+      final uploadUrl = Uri.parse('https://api.cloudinary.com/v1_1/$cloudName/$uploadEndpoint');
+
+      final request = http.MultipartRequest('POST', uploadUrl);
+      request.fields['upload_preset'] = uploadPreset;
+      if (isPdf) request.fields['resource_type'] = 'raw';
+
+      if (kIsWeb) {
+        final bytes = picked.bytes;
+        if (bytes == null) throw Exception('No bytes available from file');
+        request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
+      } else {
+        final path = picked.path;
+        if (path == null) throw Exception('No file path available');
+        final file = File(path);
+        final length = await file.length();
+        final stream = http.ByteStream(file.openRead());
+        request.files.add(http.MultipartFile('file', stream, length, filename: p.basename(path)));
+      }
+
+      // show progress
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const AlertDialog(
+          content: SizedBox(height: 80, child: Center(child: CircularProgressIndicator())),
+        ),
+      );
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      Navigator.of(context).pop();
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        throw Exception('Upload failed (${response.statusCode}): ${response.body}');
+      }
+
+      final Map<String, dynamic> json = jsonDecode(response.body) as Map<String, dynamic>;
+      // ignore: avoid_print
+      print('Cloudinary response: $json');
+
+      final secureUrl = json['secure_url'] as String?;
+      final publicId = json['public_id'] as String?;
+      final returnedFormat = (json['format'] as String?) ?? fileExt;
+      final returnedBytes = (json['bytes'] as int?) ?? 0;
+
+      String effectiveUrl = '';
+      if (secureUrl != null && secureUrl.isNotEmpty) effectiveUrl = secureUrl;
+      if (effectiveUrl.isEmpty && publicId != null) {
+        final safePublic = publicId.toLowerCase().endsWith('.pdf') ? publicId : '$publicId.pdf';
+        effectiveUrl = 'https://res.cloudinary.com/$cloudName/raw/upload/fl_attachment/$safePublic';
+      }
+      if (effectiveUrl.isEmpty) throw Exception('Could not build a valid Cloudinary URL for this file.');
+
+      await fileCollection.add({
+        'title': title.trim(),
+        'description': description.trim(),
+        'fileName': fileName,
+        'fileUrl': effectiveUrl,
+        'publicId': publicId ?? '',
+        'uploadedBy': user.uid,
+        'uploadedAt': Timestamp.now(),
+        'fileType': returnedFormat,
+        'size': returnedBytes,
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File uploaded successfully')));
+      setState(() => _streamKey = UniqueKey());
+    } catch (e, st) {
+      try {
+        Navigator.of(context, rootNavigator: true).pop();
+      } catch (_) {}
+      // ignore: avoid_print
+      print('Upload error: $e\n$st');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+    }
+  }
+
+  Future<void> _deleteFile(DocumentSnapshot doc) async {
+    final Map<String, dynamic> data = (doc.data() as Map<String, dynamic>?) ?? {};
+    final title = (data['title'] ?? data['fileName'] ?? 'file').toString();
+    final docId = doc.id;
+    final publicId = (data['publicId'] ?? '').toString();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Text('Delete "$title"?'),
+        content: const Text('This will remove the file record. You can also delete the file from Cloudinary if your backend supports it.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(c, true), child: const Text('Delete')),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    try {
+      // Delete Firestore doc
+      await fileCollection.doc(docId).delete();
+
+      // Optionally call backend to delete file from Cloudinary (requires a backend)
+      if (cloudinaryDeleteEndpoint.isNotEmpty && publicId.isNotEmpty) {
+        try {
+          final resp = await http.post(Uri.parse(cloudinaryDeleteEndpoint),
+              headers: {'Content-Type': 'application/json'}, body: jsonEncode({'public_id': publicId}));
+          if (resp.statusCode < 200 || resp.statusCode >= 300) {
+            // warn but continue
+            // ignore: avoid_print
+            print('Cloudinary delete failed: ${resp.statusCode} ${resp.body}');
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Record deleted; cloud deletion failed')));
+            return;
+          }
+        } catch (e) {
+          // ignore: avoid_print
+          print('Cloudinary delete call failed: $e');
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Record deleted; cloud deletion error')));
+          return;
+        }
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('File deleted')));
+      setState(() => _streamKey = UniqueKey());
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Delete failed: $e')));
+    }
+  }
+
+  // ------------------ new helpers for in-app viewing & downloading ------------------
+
   Future<void> _openInAppViewer(String url, String fileType, {String? title}) async {
     final t = fileType.toLowerCase();
     try {
@@ -298,6 +542,7 @@ class _StudentFileViewPageState extends State<StudentFileViewPage> {
       final resp = await dio.download(url, savePath, options: Options(responseType: ResponseType.bytes));
       if (resp.statusCode == 200 || resp.statusCode == 201) return File(savePath);
     } catch (e) {
+      // ignore
       // ignore: avoid_print
       print('tmp download failed: $e');
     }
@@ -358,7 +603,9 @@ class _StudentFileViewPageState extends State<StudentFileViewPage> {
         builder: (_) => const AlertDialog(content: SizedBox(height: 80, child: Center(child: CircularProgressIndicator()))),
       );
 
-      final resp = await dio.download(url, savePath);
+      final resp = await dio.download(url, savePath, onReceiveProgress: (rec, total) {
+        // optional: you can update UI with setState if you want progress
+      });
 
       Navigator.of(context).pop();
 
@@ -406,16 +653,11 @@ class _StudentFileViewPageState extends State<StudentFileViewPage> {
     final query = _searchQuery.trim().toLowerCase();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.folderName),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => setState(() => _streamKey = UniqueKey()),
-          ),
-        ],
+      appBar: AppBar(title: Text(widget.folderName)),
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.upload_file),
+        onPressed: _uploadWithMetadata,
       ),
-      // No FAB for students - they can't upload files
       body: Column(
         children: [
           // Search & filter row
@@ -448,6 +690,10 @@ class _StudentFileViewPageState extends State<StudentFileViewPage> {
                     const PopupMenuItem(value: 'other', child: Text('Other')),
                   ],
                 ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () => setState(() => _streamKey = UniqueKey()),
+                ),
               ],
             ),
           ),
@@ -476,7 +722,7 @@ class _StudentFileViewPageState extends State<StudentFileViewPage> {
                   return title.contains(query) || fileName.contains(query) || desc.contains(query);
                 }).toList();
 
-                if (docs.isEmpty) return const Center(child: Text('No files available'));
+                if (docs.isEmpty) return const Center(child: Text('No files match your search'));
 
                 return ListView.builder(
                   itemCount: docs.length,
@@ -489,7 +735,6 @@ class _StudentFileViewPageState extends State<StudentFileViewPage> {
                     final fileUrl = data['fileUrl'] as String?;
                     final size = (data['size'] ?? 0) as int;
                     final ts = data['uploadedAt'] as Timestamp?;
-                    final uploadedBy = (data['uploadedBy'] ?? '').toString();
 
                     // guessed filename for saving
                     final guessedName = (data['fileName'] ?? (fileUrl != null ? Uri.parse(fileUrl).pathSegments.last : 'file')).toString();
@@ -499,19 +744,7 @@ class _StudentFileViewPageState extends State<StudentFileViewPage> {
                       child: ExpansionTile(
                         leading: _leadingIcon(fileType),
                         title: Text(title),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('${_formatTimestamp(ts)} • ${_formatBytes(size)}'),
-                            if (uploadedBy.isNotEmpty) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                'Uploaded by: ${uploadedBy}',
-                                style: const TextStyle(fontSize: 12, color: Colors.grey),
-                              ),
-                            ],
-                          ],
-                        ),
+                        subtitle: Text('${_formatTimestamp(ts)} • ${_formatBytes(size)}'),
                         children: [
                           if (desc.isNotEmpty)
                             Padding(
@@ -544,7 +777,11 @@ class _StudentFileViewPageState extends State<StudentFileViewPage> {
                                         }
                                       },
                               ),
-                              // No delete button for students
+                              TextButton.icon(
+                                icon: const Icon(Icons.delete, color: Colors.red),
+                                label: const Text('Delete', style: TextStyle(color: Colors.red)),
+                                onPressed: () => _deleteFile(doc),
+                              ),
                             ],
                           ),
                         ],
@@ -575,6 +812,7 @@ class PdfViewerScreen extends StatefulWidget {
 class _PdfViewerScreenState extends State<PdfViewerScreen> {
   @override
   void dispose() {
+    // PdfControllerPinch.dispose() closes the document as well.
     widget.controller.dispose();
     super.dispose();
   }
@@ -582,7 +820,12 @@ class _PdfViewerScreenState extends State<PdfViewerScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(
+        title: Text(widget.title),
+        actions: [
+          // optional: page info or search icon later
+        ],
+      ),
       body: PdfViewPinch(
         controller: widget.controller,
       ),

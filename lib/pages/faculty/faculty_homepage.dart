@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'profile_management.dart';
-import 'dashboard_page.dart';
-import 'messages_page.dart';
-import 'gallery_page.dart'; // FIX: Use a relative path, as both files are in the 'pages' folder.
+import '../profile_management.dart';
+import '../messages_page.dart';
+import '../faculty/faculty_dashboard_page.dart';
 import 'dart:math';
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class FacultyHomepage extends StatefulWidget {
+  const FacultyHomepage({super.key});
 
   @override
-  State<HomePage> createState() => _HomePageState();
+  State<FacultyHomepage> createState() => _FacultyDashboardPageState();
 }
 
-class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
+class _FacultyDashboardPageState extends State<FacultyHomepage>
+    with TickerProviderStateMixin {
   int _currentIndex = 2; // Default = Dashboard
   final User? user = FirebaseAuth.instance.currentUser;
   final FlutterTts _tts = FlutterTts();
@@ -28,18 +28,19 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     super.initState();
     _speakWelcome();
 
-    // Tabs for navigation
+    // Faculty-specific tabs
     _pages = [
       const MessagesPage(),
-      const GalleryPage(),
-      const DashboardPage(),
+      const Center(
+        child: Text("Faculty Gallery", style: TextStyle(fontSize: 20)),
+      ),
+      const FacultyDashboardPage(), // can customize dashboard for faculty
       const Center(
         child: Text("Announcements", style: TextStyle(fontSize: 20)),
       ),
       const ProfileManagementPage(),
     ];
 
-    // Particle animation
     _particleController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 20),
@@ -50,7 +51,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
     if (_welcomed) return;
     _welcomed = true;
 
-    final name = user?.displayName ?? user?.email?.split('@')[0] ?? "User";
+    final name = user?.displayName ?? user?.email?.split('@')[0] ?? "Faculty";
 
     await _tts.setLanguage("en-US");
     await _tts.setSpeechRate(0.45);
@@ -68,7 +69,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final name = user?.displayName ?? user?.email?.split('@')[0] ?? 'User';
+    final name = user?.displayName ?? user?.email?.split('@')[0] ?? 'Faculty';
 
     return Scaffold(
       extendBody: true,
@@ -174,7 +175,7 @@ class _HomePageState extends State<HomePage> with TickerProviderStateMixin {
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.message),
-              label: "Global Chat",
+              label: "Messages",
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.photo_library),
@@ -204,10 +205,8 @@ class _ParticlePainter extends CustomPainter {
 
     for (int i = 0; i < 40; i++) {
       final dx = (size.width * ((i * 73) % 100) / 100) + 20 * sin(progress + i);
-      // horizontal drift
       final dy =
-          (size.height * ((i * 41) % 100) / 100) +
-          30 * cos(progress + i * 2); // vertical float
+          (size.height * ((i * 41) % 100) / 100) + 30 * cos(progress + i * 2);
       canvas.drawCircle(Offset(dx, dy), 2 + (i % 3).toDouble(), paint);
     }
   }

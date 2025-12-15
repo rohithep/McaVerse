@@ -5,7 +5,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
-import 'home_page.dart'; // Adjust path if needed
+import 'home_page.dart';
+import 'faculty/faculty_homepage.dart';
+import 'alumini/alumni_dashboard.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -102,6 +104,7 @@ class _RegisterPageState extends State<RegisterPage>
         }
       }
 
+      // Save user data with status (Student, Faculty, Alumni)
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCred.user!.uid)
@@ -112,12 +115,23 @@ class _RegisterPageState extends State<RegisterPage>
             'phone': _phoneController.text.trim(),
             'regNo': _regNoController.text.trim(),
             'bloodGroup': _bloodGroupController.text.trim(),
-            'status': _status,
+            'status': _status, // important for role-based navigation
             'yearOfStudy': _yearOfStudy,
             'faculty': _facultyController.text.trim(),
             'alumniYears': _alumniYearsController.text.trim(),
             'profileImageUrl': profileImageUrl,
+            'createdAt': FieldValue.serverTimestamp(),
           });
+
+      // Redirect based on role
+      Widget nextPage;
+      if (_status == 'Faculty') {
+        nextPage = const FacultyHomepage();
+      } else if (_status == 'Alumni') {
+        nextPage = const AlumniDashboardPage();
+      } else {
+        nextPage = const HomePage();
+      }
 
       if (!mounted) return;
       ScaffoldMessenger.of(
@@ -126,8 +140,7 @@ class _RegisterPageState extends State<RegisterPage>
 
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              const HomePage(),
+          pageBuilder: (context, animation, secondaryAnimation) => nextPage,
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             const beginOffset = Offset(0, 0.3);
             const endOffset = Offset.zero;
@@ -169,7 +182,6 @@ class _RegisterPageState extends State<RegisterPage>
       labelStyle: const TextStyle(color: Colors.white70),
       filled: true,
       fillColor: Colors.white.withValues(alpha: 0.08),
-
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide.none,
@@ -387,7 +399,7 @@ class _RegisterPageState extends State<RegisterPage>
                       ),
                       const SizedBox(height: 12),
 
-                      /// Status
+                      /// Status (Role)
                       DropdownButtonFormField<String>(
                         value: _status,
                         decoration: _inputDecoration("Status"),
@@ -459,7 +471,6 @@ class _RegisterPageState extends State<RegisterPage>
                             shadowColor: Colors.blueAccent.withValues(
                               alpha: 0.6,
                             ),
-
                             elevation: 6,
                           ),
                           child: _isLoading

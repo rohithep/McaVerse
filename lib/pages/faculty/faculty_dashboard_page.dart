@@ -9,10 +9,10 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:mcaverse/pages/academics_page.dart';
-import 'filter_page.dart';
-import 'package:mcaverse/pages/direct_messages_page.dart';
 
+import 'filter_page.dart';
+import 'faculty_academics_page.dart';
+import 'package:mcaverse/pages/direct_messages_page.dart';
 
 /// Public model to represent a birthday user.
 /// Made public to avoid exposing private types in a public API.
@@ -29,14 +29,14 @@ class BirthdayUser {
 }
 
 /// Main dashboard page (stateful so we can use `mounted` checks and local state later)
-class DashboardPage extends StatefulWidget {
-  const DashboardPage({super.key});
+class FacultyDashboardPage extends StatefulWidget {
+  const FacultyDashboardPage({super.key});
 
   @override
-  State<DashboardPage> createState() => _DashboardPageState();
+  State<FacultyDashboardPage> createState() => _FacultyDashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
+class _FacultyDashboardPageState extends State<FacultyDashboardPage> {
   @override
   Widget build(BuildContext context) {
     // Current authenticated user (may be null if not signed in)
@@ -145,7 +145,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         onTap: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const AcademicsPage(),
+                            builder: (_) => const FacultyAcademicsPage(),
                           ),
                         ),
                       ),
@@ -156,7 +156,7 @@ class _DashboardPageState extends State<DashboardPage> {
                         onTap: () => _go(context, "/events"),
                         badge: "Live",
                       ),
-                     _QuickCard(
+                      _QuickCard(
                             title: "Messages",
                             icon: Icons.chat_rounded,
                             color: Colors.green,
@@ -169,7 +169,6 @@ class _DashboardPageState extends State<DashboardPage> {
                               );
                             },
                           ),
-
                       _QuickCard(
                         title: "Donation",
                         icon: Icons.volunteer_activism_rounded,

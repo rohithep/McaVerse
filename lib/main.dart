@@ -8,8 +8,14 @@ import 'pages/home_page.dart';
 import 'pages/profile_management.dart';
 import 'pages/dashboard_page.dart';
 import 'pages/messages_page.dart';
+import 'pages/gallery_page.dart';
 import 'pages/academics_page.dart';
 import 'pages/splash_screen.dart';
+import 'pages/faculty/faculty_homepage.dart';
+import 'pages/alumini/alumni_dashboard.dart';
+import 'pages/faculty/faculty_academics_page.dart';
+import 'pages/faculty/faculty_dashboard_page.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -43,6 +49,13 @@ class MyApp extends StatelessWidget {
         '/dashboard': (context) => const DashboardPage(),
         '/messages': (context) => const MessagesPage(),
         '/academics': (context) => const AcademicsPage(),
+        '/facultyDashboard': (context) => const FacultyDashboardPage(),
+        '/alumniDashboard': (context) => const AlumniDashboardPage(),
+        '/facultyacademics': (context) => const FacultyAcademicsPage(),
+        '/facultyhome': (context) => const FacultyHomepage(),
+        '/gallery':(context)=> const GalleryPage(),
+       
+
         // add this
       },
     );
